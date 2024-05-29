@@ -1,8 +1,6 @@
 import pandas as pd
-# pd.set_option('max_columns', None)  # Display all columns
 import argparse
 import numpy as np
-from copy import deepcopy
 pd.set_option('display.max_columns', None)
 
 
@@ -82,6 +80,35 @@ def replace_values_in_column(df, old_values, new_values, column_name=None):
     return df
 
 
+def filter_by_column_count(df, classes_count=None, top_n=6, by_threshold=False):
+    # Get the classes count
+    if classes_count is None:
+        classes_count = dict(df['266'].value_counts())
+
+    if by_threshold:
+        average = sum(classes_count.values()) / len(classes_count)
+        threshold = average / 10
+        columns_to_remove = []
+        for key, value in classes_count.items():
+            if value < threshold:
+                columns_to_remove.append(key)
+        print(f'Columns to remove: {columns_to_remove}')
+        return df[~df['266'].isin(columns_to_remove)]
+    else:
+        # Sort the dictionary by values
+        sorted_classes_count = dict(sorted(classes_count.items(), key=lambda item: item[1], reverse=True))
+        # Get the top n classes
+        top_n_classes = dict(list(sorted_classes_count.items())[:top_n])
+        print(f'Top {top_n} classes: {top_n_classes}')
+        # Filter the dataset by the column count
+        columns_to_remove = []
+        for key, value in classes_count.items():
+            if key not in top_n_classes.keys():
+                columns_to_remove.append(key)
+        print(f'Columns to remove: {columns_to_remove}')
+        return df[~df['266'].isin(columns_to_remove)]
+
+
 def main():
     parser = argparse.ArgumentParser(description='Reading and filtering the dataset.')
     parser.add_argument('--path', default='data/all_data.csv', type=str, help='Path to the dataset.')
@@ -101,12 +128,12 @@ def main():
     # 2. Checking the data types of the columns
     data_type_series = df.dtypes
     cols = []
-    print('Data type of each column of Dataframe:')
+    # print('Data type of each column of Dataframe:')
     for col, type_ in data_type_series.items():
         if type_ == 'object':
             cols.append(col)
-            print(f'{col} : {type_}', end=', ')
-    print('\n')
+    #         print(f'{col} : {type_}', end=', ')
+    # print('\n')
     df = replace_values_in_column(df, ['Y', 'N'], ['1', '0'], column_name=cols)
     df = replace_values_in_column(df, ['?'], [np.nan])
 
@@ -135,23 +162,22 @@ def main():
     # Printing each dataframe information
     print(f'The shape of the dataset with rows: {df_rows.shape}')
     print(f'The classes count (text) with rows: {classes_count_rows}')
-    data_type_series = df_rows.dtypes
-    print('Data type of each column of Dataframe :')
-    for col, type_ in data_type_series.items():
-        if type_ == 'object':
-            cols.append(col)
-            print(f'{col} : {type_}', end=', ')
-    print('\n')
+    # data_type_series = df_rows.dtypes
+    # print('Data type of each column of Dataframe :')
+    # for col, type_ in data_type_series.items():
+    #     if type_ == 'object':
+    #         print(f'{col} : {type_}', end=', ')
+    # print('\n')
 
     print(f'The shape of the dataset with columns: {df_cols.shape}')
     print(f'The classes count (text) with columns: {classes_count_cols}')
-    data_type_series = df_cols.dtypes
-    print('Data type of each column of Dataframe :')
-    for col, type_ in data_type_series.items():
-        if type_ == 'object':
-            cols.append(col)
-            print(f'{col} : {type_}', end=', ')
-    print('\n')
+
+    # data_type_series = df_cols.dtypes
+    # print('Data type of each column of Dataframe :')
+    # for col, type_ in data_type_series.items():
+    #     if type_ == 'object':
+    #         print(f'{col} : {type_}', end=', ')
+    # print('\n')
 
     print(f'The shape of the dataset with rows and columns: {df.shape}')
     print(f'The classes count (text) with rows and columns: {classes_count}')
