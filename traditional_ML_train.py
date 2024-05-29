@@ -18,7 +18,7 @@ def main():
     print(f'Training the model on the dataset: {args.dataset}')
 
     # Load the dataset
-    df = read_data(args.dataset)
+    df = read_data(args.dataset) # Load the dataset
 
     x_train, x_test, y_train, y_test = create_dataset(df, top_n=args.num_classes, test_size=args.test_size, random_state=args.random_state)
     print(f'The shape of the training set: {x_train.shape}')
