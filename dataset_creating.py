@@ -1,6 +1,7 @@
 import pandas as pd
 import argparse
 import numpy as np
+from sklearn.model_selection import train_test_split
 pd.set_option('display.max_columns', None)
 
 
@@ -109,6 +110,17 @@ def filter_by_column_count(df, classes_count=None, top_n=6, by_threshold=False):
         return df[~df['266'].isin(columns_to_remove)]
 
 
+def create_dataset(df, top_n=6, test_size=0.2, random_state=42):
+    # Filter the dataset by the column count
+    df = filter_by_column_count(df, top_n=top_n)
+    features = df.drop('266', axis=1)
+    target = df['266']
+    # Split the dataset into training and testing sets
+    x_train, x_test, y_train, y_test = train_test_split(features, target, test_size=test_size,
+                                                        random_state=random_state)
+    return x_train, x_test, y_train, y_test
+
+# change the main name to reflect the name of the file and their purpose
 def main():
     parser = argparse.ArgumentParser(description='Reading and filtering the dataset.')
     parser.add_argument('--path', default='data/all_data.csv', type=str, help='Path to the dataset.')
@@ -162,22 +174,9 @@ def main():
     # Printing each dataframe information
     print(f'The shape of the dataset with rows: {df_rows.shape}')
     print(f'The classes count (text) with rows: {classes_count_rows}')
-    # data_type_series = df_rows.dtypes
-    # print('Data type of each column of Dataframe :')
-    # for col, type_ in data_type_series.items():
-    #     if type_ == 'object':
-    #         print(f'{col} : {type_}', end=', ')
-    # print('\n')
 
     print(f'The shape of the dataset with columns: {df_cols.shape}')
     print(f'The classes count (text) with columns: {classes_count_cols}')
-
-    # data_type_series = df_cols.dtypes
-    # print('Data type of each column of Dataframe :')
-    # for col, type_ in data_type_series.items():
-    #     if type_ == 'object':
-    #         print(f'{col} : {type_}', end=', ')
-    # print('\n')
 
     print(f'The shape of the dataset with rows and columns: {df.shape}')
     print(f'The classes count (text) with rows and columns: {classes_count}')
