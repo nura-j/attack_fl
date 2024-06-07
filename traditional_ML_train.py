@@ -48,6 +48,7 @@ def main():
     x_test = x_test.to_numpy()
     y_train = y_train.to_numpy()
     y_test = y_test.to_numpy()
+
     print(f'The shape of the training set: {x_train.shape}')
     print(f'The shape of the testing set: {x_test.shape}')
     print(f'The shape of the training labels: {y_train.shape}')
