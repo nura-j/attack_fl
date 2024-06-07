@@ -44,6 +44,7 @@ def main():
 
     x_train, x_test, y_train, y_test = create_dataset(df, top_n=args.num_classes, test_size=args.test_size,
                                                       random_state=args.random_state)
+
     x_train = x_train.to_numpy()
     x_test = x_test.to_numpy()
     y_train = y_train.to_numpy()
