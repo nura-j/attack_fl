@@ -348,7 +348,7 @@ def main():
 
     # Save the best model
     date_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    model_name = f"models/best_model_lstm_{date_time}.h5"
+    model_name = f"models/lstm_{date_time}.h5" # new version is model.save('my_model.keras')
     best_model.save(model_name)
 
 if __name__ == '__main__':
