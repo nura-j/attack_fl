@@ -2,6 +2,9 @@ import pandas as pd
 import argparse
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
 pd.set_option('display.max_columns', None)
 
 
@@ -120,7 +123,138 @@ def create_dataset(df, top_n=6, test_size=0.2, random_state=42):
                                                         random_state=random_state)
     return x_train, x_test, y_train, y_test
 
+def oversample(df):
+    over_sample = RandomOverSampler(sampling_strategy='all', random_state=42)
+    x = df.drop('266', axis=1)
+    y = df['266']
+    x_over, y_over = over_sample.fit_resample(x, y)
+    return pd.concat([x_over, y_over], axis=1)
+
+
+def undersample(df):
+    under_sample = RandomUnderSampler(sampling_strategy='all', random_state=42)
+    x = df.drop('266', axis=1)
+    y = df['266']
+    x_under, y_under = under_sample.fit_resample(x, y)
+    return pd.concat([x_under, y_under], axis=1)
+
+def generate_iid_client_data(X, y, num_clients=10): #  IID data distribution
+    """
+    Generate IID client data by splitting X and y into equal parts for each client.
+
+    Parameters:
+    - X (array-like): Features.
+    - y (array-like): Labels.
+    - num_clients (int): Number of clients.
+
+    Returns:
+    - client_X (list): List of feature subsets for each client.
+    - client_y (list): List of label subsets for each client.
+    """
+
+    def split_data(X, y, num_clients):
+        client_size = len(X) // num_clients
+        X, y = shuffle(X, y)
+        client_X = [X[i:i + client_size] for i in range(0, client_size * num_clients, client_size)]
+        client_y = [y[i:i + client_size] for i in range(0, client_size * num_clients, client_size)]
+        return client_X, client_y
+
+    return split_data(X, y, num_clients)
 # change the main name to reflect the name of the file and their purpose
+
+
+def generate_noniid_client_shards(X_train, y_train, num_shards, shard_size, num_clients=10,
+                                  min_shard=1, max_shard=30):
+                                    # the function of creating data into non-IID and unequal shreds
+    """
+    Sample non-I.I.D client data from network dataset s.t. clients
+    have unequal amount of data|
+    :param X_train: training data
+    :param y_train: training labels
+    :param num_shards: number of shards to divide the data into
+    :param shard_size: size of each shard
+    :param num_clients:
+    :param min_shard: minimum number of shards assigned to a client
+    :param max_shard: maximum number of shards assigned to a client
+    :returns set of client x data, client y data - training & test
+    """
+
+    idx_shard = list(range(num_shards))
+    dict_users = {i: np.array([]) for i in range(num_clients)}
+    idxs = np.arange(num_shards * shard_size)
+    labels = np.argmax(y_train, axis=1)  # Convert the one-hot encoding to labels
+
+
+    # Sort labels
+    idxs_labels = np.vstack((idxs, labels))
+    idxs_labels = idxs_labels[:, idxs_labels[1, :].argsort()]
+    idxs = idxs_labels[0, :]
+
+    # Divide the shards into random chunks for every client s.t the sum of these chunks = num_shards
+    random_shard_size = np.random.randint(min_shard, max_shard + 1, size=num_clients)
+    random_shard_size = np.around(random_shard_size / sum(random_shard_size) * num_shards).astype(int)
+
+    # Ensure sum of random_shard_size does not exceed num_shards
+    if sum(random_shard_size) > num_shards:
+        random_shard_size -= 1
+
+    # Assign the shards to each client
+    for i in range(num_clients):
+        if len(idx_shard) == 0:
+            break
+        shard_count = min(random_shard_size[i], len(idx_shard))
+        rand_set = set(np.random.choice(idx_shard, shard_count, replace=False))
+        idx_shard = list(set(idx_shard) - rand_set)
+        for rand in rand_set:
+            dict_users[i] = np.concatenate((dict_users[i], idxs[rand * shard_size:(rand + 1) * shard_size]), axis=0)
+
+    # Distribute any remaining shards
+    while len(idx_shard) > 0:
+        min_client = min(dict_users, key=lambda x: len(dict_users[x]))
+        rand_set = set(np.random.choice(idx_shard, 1, replace=False))
+        idx_shard = list(set(idx_shard) - rand_set)
+        for rand in rand_set:
+            dict_users[min_client] = np.concatenate(
+                (dict_users[min_client], idxs[rand * shard_size:(rand + 1) * shard_size]), axis=0)
+
+    client_X = [X_train[value.astype(int)] for key, value in dict_users.items()]
+    client_y = [y_train[value.astype(int)] for key, value in dict_users.items()]
+
+    return client_X, client_y
+
+def calculate_shards_and_rows_simple(total_samples, desired_shard_size):
+    num_shards = total_samples // desired_shard_size
+    num_rows = desired_shard_size
+    return num_shards, num_rows
+
+
+def calculate_shards_and_rows(total_samples, desired_num_shards=None, min_shard_size=50, max_shard_size=500):
+    """
+    Calculate the number of shards and rows per shard based on total samples and constraints.
+
+    Parameters:
+    - total_samples (int): The total number of samples in the dataset.
+    - desired_num_shards (int, optional): The desired number of shards. If None, will be calculated dynamically.
+    - min_shard_size (int): The minimum size of a shard.
+    - max_shard_size (int): The maximum size of a shard.
+
+    Returns:
+    - num_shards (int): The number of shards.
+    - shard_size (int): The number of rows per shard.
+    """
+
+    if desired_num_shards:
+        shard_size = max(min_shard_size, min(max_shard_size, total_samples // desired_num_shards))
+    else:
+        # Determine a shard size dynamically within the given range
+        possible_shard_sizes = [size for size in range(min_shard_size, max_shard_size + 1) if total_samples % size == 0]
+        if possible_shard_sizes:
+            shard_size = max(possible_shard_sizes)
+        else:
+            shard_size = max(min_shard_size, min(max_shard_size, total_samples // (total_samples // max_shard_size)))
+
+    num_shards = total_samples // shard_size
+    return num_shards, shard_size
 def main():
     parser = argparse.ArgumentParser(description='Reading and filtering the dataset.')
     parser.add_argument('--path', default='data/all_data.csv', type=str, help='Path to the dataset.')

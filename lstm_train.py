@@ -27,33 +27,7 @@ from tensorflow.keras.layers import Dense, LSTM, Dropout
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from sklearn.utils import shuffle
-from imblearn.over_sampling import RandomOverSampler
-from dataset_creating import read_data, create_dataset
-
-
-def oversample(df):
-    oversample = RandomOverSampler(sampling_strategy='all')
-    X = df.drop('266', axis=1)
-    y = df['266']
-    X_over, y_over = oversample.fit_resample(X, y)
-    return pd.concat([X_over, y_over], axis=1)
-
-
-#IID data distribtion
-def generate_client_data(X_train, y_train, X_test, y_test, num_clients=10, NUM_CLASSES=6):
-    client_size = len(X_train) // num_clients
-    X_train, y_train = shuffle(X_train, y_train)
-    client_X = [X_train[i:i + client_size] for i in range(0, client_size * num_clients, client_size)]
-    client_y = [keras.utils.to_categorical(y_train[i:i + client_size], NUM_CLASSES) for i in
-                range(0, client_size * num_clients, client_size)]
-
-    client_size_test = len(X_test) // num_clients
-    X_test, y_test = shuffle(X_test, y_test)
-    client_X_test = [X_test[i:i + client_size_test] for i in range(0, client_size_test * num_clients, client_size_test)]
-    client_y_test = [keras.utils.to_categorical(y_test[i:i + client_size_test], NUM_CLASSES) for i in
-                     range(0, client_size_test * num_clients, client_size_test)]
-
-    return client_X, client_y, client_X_test, client_y_test
+from dataset_creating import read_data, create_dataset, oversample
 
 
 # the function of creating data into non-IID and unequal shreds
@@ -220,7 +194,7 @@ class RNNModel3:
                            metrics=['accuracy'])
 
     def train_and_evaluate(self, x_train, x_test, y_train, y_test, batch_size=1000, epochs=10, validation_split=0.1):
-        self.model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_split=validation_split)
+        self.model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_split=validation_split, verbose=1)
         accuracy = self.model.evaluate(x_test, y_test)[1]
         y_pred = np.argmax(self.model.predict(x_test), axis=1)
         # per_class_accuracy = np.mean(y_test == np.round(self.model.predict(x_test)), axis=0)
@@ -242,15 +216,13 @@ def main():
                         help='Number of classes to keep in the dataset.')
     parser.add_argument('--random_state', default=42, type=int,
                         help='Random state for splitting the dataset.')
-    parser.add_argument('--oversample', default=True, type=bool,
+    parser.add_argument('--oversample', default=False, type=bool,
                         help='Oversample the dataset to solve the imbalance in the dataset')
     parser.add_argument('--selected_columns', default=[0, 1, 2, 3, 4, 5],
                         help='Oversample the dataset to solve the imbalance in the dataset')
-    parser.add_argument('--num_clients', default=10, type=int,
-                        help='Number of clients to generate the data for')
     parser.add_argument('--num_rounds', default=20, type=int,
                         help='Number of rounds to train the model')
-    parser.add_argument('--epochs', default=5, type=int,
+    parser.add_argument('--epochs', default=10, type=int,
                         help='Number of epochs to train the model')
     parser.add_argument('--batch_size', default=100, type=int,
                         help='Batch size for training the model')
@@ -280,10 +252,10 @@ def main():
         df = oversample(df)
     x_train, x_test, y_train, y_test = create_dataset(df, top_n=args.num_classes, test_size=args.test_size,
                                                       random_state=args.random_state)
-    x_train = x_train[:1000]
-    y_train = y_train[:1000]
-    x_test = x_test[:1000]
-    y_test = y_test[:1000]
+    # x_train = x_train[:1000]
+    # y_train = y_train[:1000]
+    # x_test = x_test[:1000]
+    # y_test = y_test[:1000]
     # TODO: handle the case where the selected columns are not in order for the categorical values
 
     x_train = x_train.to_numpy()
@@ -325,6 +297,7 @@ def main():
 
     # Create and evaluate model 3
     model_3 = RNNModel3(x_train)
+    model_3.model.summary()
     accuracy_3, per_class_accuracy_3, cm_3 = model_3.train_and_evaluate(x_train, x_test, y_train, y_test,
                                                                         batch_size=args.batch_size, epochs=args.epochs,
                                                                         validation_split=args.validation_size)
@@ -350,6 +323,7 @@ def main():
     date_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     model_name = f"models/lstm_{date_time}.h5" # new version is model.save('my_model.keras')
     best_model.save(model_name)
+
 
 if __name__ == '__main__':
     main()
