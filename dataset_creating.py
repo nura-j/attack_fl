@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
+from tensorflow.keras.utils import to_categorical
 pd.set_option('display.max_columns', None)
 
 
@@ -87,7 +88,7 @@ def replace_values_in_column(df, old_values, new_values, column_name=None):
 def filter_by_column_count(df, classes_count=None, top_n=6, by_threshold=False):
     # Get the classes count
     if classes_count is None:
-        classes_count = dict(df['266'].value_counts())
+        classes_count = dict(df['class'].value_counts()) # or 266
 
     if by_threshold:
         average = sum(classes_count.values()) / len(classes_count)
@@ -97,7 +98,7 @@ def filter_by_column_count(df, classes_count=None, top_n=6, by_threshold=False):
             if value < threshold:
                 columns_to_remove.append(key)
         print(f'Columns to remove: {columns_to_remove}')
-        return df[~df['266'].isin(columns_to_remove)]
+        return df[~df['class'].isin(columns_to_remove)] # or 266
     else:
         # Sort the dictionary by values
         sorted_classes_count = dict(sorted(classes_count.items(), key=lambda item: item[1], reverse=True))
@@ -110,31 +111,41 @@ def filter_by_column_count(df, classes_count=None, top_n=6, by_threshold=False):
             if key not in top_n_classes.keys():
                 columns_to_remove.append(key)
         print(f'Columns to remove: {columns_to_remove}')
-        return df[~df['266'].isin(columns_to_remove)]
+        return df[~df['class'].isin(columns_to_remove)] # or 266
 
 
 def create_dataset(df, top_n=6, test_size=0.2, random_state=42):
     # Filter the dataset by the column count
     df = filter_by_column_count(df, top_n=top_n)
-    features = df.drop('266', axis=1)
-    target = df['266']
+    features = df.drop('class', axis=1) # or 266
+    target = df['class']
     # Split the dataset into training and testing sets
     x_train, x_test, y_train, y_test = train_test_split(features, target, test_size=test_size,
                                                         random_state=random_state)
+    x_train = x_train.to_numpy()
+    x_test = x_test.to_numpy()
+    y_train = to_categorical(y_train, num_classes=top_n)  # Convert to one-hot encoding
+    y_test = to_categorical(y_test, num_classes=top_n)  # Convert to one-hot encoding
+
+    # Reshaping the NumPy array to meet TensorFlow standards
+    x_train = np.reshape(x_train, (x_train.shape[0],
+                                            x_train.shape[1], 1))
+    x_test = np.reshape(x_test, (x_test.shape[0],
+                                            x_test.shape[1], 1))
     return x_train, x_test, y_train, y_test
 
 def oversample(df):
     over_sample = RandomOverSampler(sampling_strategy='all', random_state=42)
-    x = df.drop('266', axis=1)
-    y = df['266']
+    x = df.drop('class', axis=1) #or # or 266
+    y = df['class'] # or # or 266
     x_over, y_over = over_sample.fit_resample(x, y)
     return pd.concat([x_over, y_over], axis=1)
 
 
 def undersample(df):
     under_sample = RandomUnderSampler(sampling_strategy='all', random_state=42)
-    x = df.drop('266', axis=1)
-    y = df['266']
+    x = df.drop('class', axis=1) # or 266
+    y = df['class'] # or 266
     x_under, y_under = under_sample.fit_resample(x, y)
     return pd.concat([x_under, y_under], axis=1)
 
@@ -255,9 +266,13 @@ def calculate_shards_and_rows(total_samples, desired_num_shards=None, min_shard_
 
     num_shards = total_samples // shard_size
     return num_shards, shard_size
+
 def main():
     parser = argparse.ArgumentParser(description='Reading and filtering the dataset.')
     parser.add_argument('--path', default='data/all_data.csv', type=str, help='Path to the dataset.')
+    parser.add_argument('--top_n', default=6, type=int, help='Number of classes to keep in the dataset.')
+    parser.add_argument('--distribution', default='iid', type=str, choices=['iid', 'noniid'],)
+    parser.add_argument('--num_clients', default=10, type=int, help='Number of clients for non-IID distribution.')
     args = parser.parse_args()
 
     path = args.path
@@ -265,7 +280,7 @@ def main():
     print(f'The shape of the dataset: {df.shape}\n')
     # Filtering the dataset - without dropping nan - simple cleaning and converting the text classes to numeric
     # 1. Converting the text classes to numeric
-    classes_count = dict(df['266'].value_counts())
+    classes_count = dict(df['266'].value_counts()) # or 266
     print(f'The classes count (text): {classes_count}')
     df['266'] = df['266'].apply(application_to_numeric)  # Applying the function to the column
     classes_count = dict(df['266'].value_counts())
@@ -287,13 +302,13 @@ def main():
     df_rows = df.dropna()
 
     # checking the distribution of the classes
-    classes_count_rows = dict(df_rows['266'].value_counts())
+    classes_count_rows = dict(df_rows['266'].value_counts()) # or class
 
     # 3.2 remove the missing values in the columns
     df_cols = df.dropna(axis='columns')
 
     # checking the distribution of the classes
-    classes_count_cols = dict(df_cols['266'].value_counts())
+    classes_count_cols = dict(df_cols['266'].value_counts()) # or class
 
     # Save the datasets
     # 1. Save the dataset with the rows
@@ -313,7 +328,7 @@ def main():
     print(f'The classes count (text) with columns: {classes_count_cols}')
 
     print(f'The shape of the dataset with rows and columns: {df.shape}')
-    print(f'The classes count (text) with rows and columns: {classes_count}')
+
 
 
 if __name__ == '__main__':
