@@ -1,5 +1,3 @@
-I'll create a comprehensive README.md file for this research project:
-
 ```markdown
 # Genetic Algorithm-Based Dynamic Backdoor Attack on Federated Learning-Based Network Traffic Classification
 
