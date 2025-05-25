@@ -4,7 +4,7 @@ import numpy as np
 from numpy.random import randint, rand
 from sklearn.model_selection import train_test_split
 import keras
-
+from random import sample
 from dataset_creating import read_data, create_dataset, oversample, undersample
 from dataset_creating import generate_iid_client_data, generate_noniid_client_shards, calculate_shards_and_rows, \
     calculate_shards_and_rows_simple
@@ -291,6 +291,183 @@ def genetic_attack(clients_x, clients_y, clients_x_test, clients_y_test, x_test,
             flag = False
 
     return 0
+
+
+def generate_trigger_updated(x_train, y_train, x_test, y_test, clean_model, mal_model, target):
+    pop_size = 20  # pop_size=10;
+    n_bits = 48
+    n_pop = pop_size
+    pop = [randint(0, 2, n_bits).tolist() for _ in range(n_pop)]  # pop_init = randi([0 1], pop_size,30);
+    parents = pop  # parents=pop_init;
+    # for indivisual in parents:
+    #   print(indivisual)
+
+    # size of population set it to fixed size (do not make it exponentioal)
+    n_iter = 2  # 100 similation or 10~5 with confidence interval
+    best_fit_arr = []
+    mean_fit_arr = []
+    for i in range(n_iter):
+        print("Iteration: ", i)
+        # print("len(parents)", len(parents))
+        sum_fit = 0
+        max_fit = 0
+        Trigger = [0, 0, 0]
+        Lox = [0, 0, 0]
+        fit_arr = dict()
+        # crossover
+        os = crossover(parents)  # parent 10 - OS -5
+        # mutation
+        os = [list(mutation(np.array(ind))) for ind in os]
+        combined = parents + os
+        # print("len(combined)", len(combined))
+        for j in range(len(combined)):  # Sample?
+            # calc_fitness_4(x_training_data, y_training_data, x_test_data, y_test_data, rnn_clean_2, rnn_m, genome, no_features=no_features, alpha = .5)
+            fit, trigger, lox = calc_fitness_4_updated(x_train, y_train, x_test, y_test, clean_model, mal_model,
+                                                       combined[j], target)
+            sum_fit += fit
+            fit_arr[j] = fit
+            if fit >= max_fit:
+                Trigger = trigger
+                Lox = lox
+                max_fit = fit
+            # max_fit = max(max_fit, fit) #store the trigger
+        d = sorted(fit_arr.items(), key=lambda x: x[1], reverse=True)
+        # per = np.random.permutation(pop_size)
+        bad_others_lox = sample(worst, 5)
+        # bad_others_lox = per[:3]#bad_others_lox= pop_size+randperm(pop_size,3);  #I will change this to rand
+        parents = [combined[d[i][0]] for i in range(15)]  # Update 15 no the new value
+        for i in bad_others_lox:
+            parents.append(combined[i])
+        best_fit_arr.append(max_fit)
+        mean_fit_arr.append(sum_fit / len(fit_arr))
+        print("LOX & TYPE", Lox, type(Lox))
+        for i, item in enumerate(Lox):
+            if item >= 216:  # number of features
+                Lox[i] = Lox[i] - 1
+    print("Trigger: ", Trigger)
+    print("Lox: ", Lox)
+    return Trigger, Lox
+
+
+no_features = 216
+worst = [*range(20, 30, 1)]
+
+#Creating the poisoned data
+#X_test -> the images
+#Y_test -> the labels
+#percentage -> the precentage of images to poison (ratio)
+#attck_type -> a. single_class (targeted), b. multiple (non-targted)
+#def add_backdoor(X_test, Y_test, trigger, percentage = 30, attck_type = "single_class", poison = "poison_1", target=5):
+def add_backdoor_updated(X_test, Y_test, ratio, lox, trigger, target):
+  per = ratio / 100
+  benign_data_X, mal_data_X, benign_data_y, mal_data_Y = train_test_split(X_test, Y_test, test_size=per)
+  for i, item in enumerate(mal_data_X):
+    for x, y in zip(lox,trigger):
+      item[x] = y
+    mal_data_X[i] = item
+    if target == 0:
+      mal_data_Y[:] = [1., 0., 0., 0., 0., 0.]
+    elif target == 1:
+      mal_data_Y[:] = [0., 1., 0., 0., 0., 0.]
+  #mal_data_Y[:] = target #automiate this later
+  return benign_data_X, mal_data_X, benign_data_y, mal_data_Y
+
+def calc_fitness_4_updated(x_training_data, y_training_data, x_test_data, y_test_data, rnn_clean_2, rnn_m, genome,
+                           target, no_features=no_features,
+                           alpha=.5):  # What is genome here? I assume it is one individual
+    XTrain = x_training_data  # Sample - everytime
+    YTrain = y_training_data
+
+    ratio = 0.2  # ratio=0.2;
+    loc1 = genome[0:8]  # loc1=genome(1:5);
+    loc2 = genome[8:16]  # loc2=genome(6:10);
+    loc3 = genome[
+           16:24]  # loc3=genome(11:15); #2^8 -  256 but we have 211 features so we need to trim it (for now anything larger than 211 will be mapped to 211)
+
+    # x=min(bin2dec(num2str(loc1)), 18); #What is happening here? + Why 18? 18 features?
+    # x=max(x,axis = 1)#x=max(x,1); Is 1 the rows?
+    loc1 = ''.join([str(elem) for elem in loc1])
+    x = int(str(loc1), 2)
+    if x >= no_features:
+        x = no_features - 1  # check the zero case - edges
+
+    # y=min(bin2dec(num2str(loc2)),18); #What is happening here?
+    # y=max(y,axis = 1) #y=max(y,1);
+    loc2 = ''.join([str(elem) for elem in loc2])  # convert the list of bin to one number
+    y = int(str(loc2), 2)
+    if y >= no_features:
+        y = no_features - 1  # check the zero case - edges
+
+    # z=min(bin2dec(num2str(loc3)),18); #What is happening here?
+    # z=max(z,axis = 1) #z=max(z,1);
+    loc3 = ''.join([str(elem) for elem in loc3])
+    z = int(str(loc3), 2)
+    if z >= no_features:
+        z = no_features - 1  # check the zero case - edges
+
+    lox = [x, y,
+           z]  # lox=[x y z];aka location of the trigger (* WE MUST consider the case where x or y or z equal the same one)
+
+    a = genome[24:32]  # a=genome(16:20); #Value of the trigger
+    b = genome[32:40]  # b=genome(21:25);
+    c = genome[40:48]  # c=genome(26:30);
+    # aa=bin2dec(num2str(a)); #Here we need to fix the range (just to avoid any anomaly detect)
+    a = ''.join([str(elem) for elem in a])
+    aa = int(str(a), 2)
+    # aa = fix_range(aa, x) #to normalize it
+
+    b = ''.join([str(elem) for elem in b])
+    # bb=bin2dec(num2str(b));
+    bb = int(str(b), 2)
+    # bb = fix_range(bb, y) #to normalize it
+
+    c = ''.join([str(elem) for elem in c])
+    # cc=bin2dec(num2str(c));
+    cc = int(str(c), 2)
+    # cc = fix_range(cc, z) #to normalize it (easy method define a dictionary of the features - keep the min and max of each one)
+
+    trigger = [aa, bb, cc]  # trigger=[aa bb cc]; - make sure to fix the range
+
+    y_target = 0  # yt="WWW"; -? Is it a good choice? (if the data balanced then no problem)
+
+    # I assume this is the poised & bengin data?
+    # [Xb,yb]=add_backdoor(XTrain,yTrain, ratio, lox, trigger, yt);
+    # add_backdoor(X_test, Y_test, ratio, lox, trigger, target)
+    print("Calling the add backdoor")
+    benign_data_X, mal_data_X, benign_data_y_one_hot, mal_data_Y_one_hot = add_backdoor_updated(x_training_data,
+                                                                                                y_training_data, .2,
+                                                                                                lox, trigger, target)
+    print("had finished the add backdoor")
+    # benign_data_y_one_hot = to_categorical(benign_data_y, NUM_CLASSES)
+    # mal_data_Y_one_hot = to_categorical(mal_data_Y, NUM_CLASSES)
+    # Clean model training
+    # net1 = trainNetwork(XTrain,yTrain,layers,options);
+
+    print("Training clean model")
+    print("benign_data_X.shape: ", benign_data_X.shape)
+    print("benign_data_y_one_hot.shape: ", benign_data_y_one_hot.shape)
+    print("mal_data_X.shape: ", mal_data_X.shape)
+    print("mal_data_Y_one_hot.shape: ", mal_data_Y_one_hot.shape)
+    his = rnn_clean_2.fit(benign_data_X, benign_data_y_one_hot, validation_split=0.3, epochs=1, batch_size=1000,
+                          verbose=1)
+    # net1 = trainNetwork(benign_data_X,benign_data_y)
+    #
+    x = np.concatenate((benign_data_X, mal_data_X))
+    y = np.concatenate((benign_data_y_one_hot, mal_data_Y_one_hot))
+    # N: THIS NEEDS UPDATE - I ONLY TRAIN ON M DATA
+    his = rnn_m.fit(x, y, validation_split=0.3, epochs=1, batch_size=1000, verbose=1)
+    # net2 = trainNetwork(Xb,yb,layers,options);
+
+    # YPred = classify(net2,Xb);
+
+    # asr=calc_ASR(YPred,yt,ratio);
+    print("Testing ASR")
+    asr = calc_ASR(rnn_m, mal_data_X, mal_data_Y_one_hot)
+    # cad=calc_CAD(net1,net2,XTrain,yTrain);
+    print("Testing CAD")
+    cad = calc_CAD(rnn_clean_2, rnn_m, x_test_data, y_test_data)
+    performance = (alpha) * asr - (1 - alpha) * abs(cad)  #
+    return performance, trigger, lox
 
 
 def main():
