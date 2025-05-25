@@ -1,4 +1,3 @@
-```markdown
 # Genetic Algorithm-Based Dynamic Backdoor Attack on Federated Learning-Based Network Traffic Classification
 
 ## Overview
