@@ -568,9 +568,3 @@ def main():
     else:
         raise ValueError('Invalid model name. Please use either rnn_1, rnn_2, or rnn_3.')
 
-    genetic_attack(clients_x, clients_y, clients_x_test, clients_y_test, x_test, y_test,
-                   model.model, model_path='models/lstm_2024-06-17-19-25-38.h5', worst=worst)
-
-
-if __name__ == '__main__':
-    main()
